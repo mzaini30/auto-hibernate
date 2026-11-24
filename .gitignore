@@ -1,0 +1,10 @@
+# Windows thumbnail cache and logs
+Thumbs.db
+Desktop.ini
+*.log
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.bak
