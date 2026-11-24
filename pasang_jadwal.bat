@@ -3,11 +3,18 @@ setlocal
 title Pasang Jadwal Daya Otomatis
 
 :: Cek apakah dijalankan sebagai Administrator
-net session >nul 2>&1
-if %errorLevel% neq 0 (
+fltmc >nul 2>&1
+if errorlevel 1 (
     echo Meminta izin Administrator...
     set "BAT_PATH=%~f0"
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', 'call', ([char]34 + $env:BAT_PATH + [char]34)) -Verb RunAs"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', 'call', ([char]34 + $env:BAT_PATH + [char]34)) -Verb RunAs } catch { Write-Host ('Gagal meminta izin Administrator: ' + $_.Exception.Message) -ForegroundColor Red; exit 1 }"
+    if errorlevel 1 (
+        echo.
+        echo Tidak dapat menjalankan sebagai Administrator.
+        echo Coba klik kanan file ini lalu pilih "Run as administrator".
+        pause
+        exit /b 1
+    )
     exit /b
 )
 
