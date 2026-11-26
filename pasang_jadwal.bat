@@ -35,7 +35,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  if ($LASTEXITCODE -ne 0) { throw 'Gagal mengaktifkan Hibernate (powercfg /h on).' }; " ^
   "  powercfg /h /type full 2>$null; " ^
   "  if ($LASTEXITCODE -ne 0) { Write-Warning 'Tidak dapat menyetel tipe hiberfile ke full; melanjutkan dengan konfigurasi default.' }; " ^
-  "  $avail = (powercfg /a) -join ' '; " ^
+  "  $availLines = @(); $seenState = $false; " ^
+  "  foreach ($line in (powercfg /a)) { " ^
+  "    if ($line -match 'not available|tidak tersedia') { break }; " ^
+  "    if ($seenState -and [string]::IsNullOrWhiteSpace($line)) { break }; " ^
+  "    if ($line -match '^\s+\S') { $seenState = $true }; " ^
+  "    $availLines += $line; " ^
+  "  }; " ^
+  "  $avail = $availLines -join ' '; " ^
   "  if ($avail -notmatch 'Hibernat|Hibernasi') { throw 'Sistem atau BIOS ini tidak mendukung atau memblokir Hibernate.' }; " ^
   "  if ($avail -match 'S0 Low Power Idle') { Write-Warning 'Sistem menggunakan Modern Standby (S0). Beberapa perangkat S0 membatasi bangun otomatis dari Hibernate (S4).' }; " ^
   "  Write-Host '[2/6] Mengaktifkan Wake Timers & menonaktifkan Unattended Sleep (semua Power Plan)...' -ForegroundColor Cyan; " ^
@@ -54,7 +61,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  powercfg /SETACTIVE SCHEME_CURRENT; " ^
   "  if ($LASTEXITCODE -ne 0) { throw 'Gagal menerapkan skema daya aktif.' }; " ^
   "  $rtcIdx = [regex]::Matches((powercfg /q SCHEME_CURRENT SUB_SLEEP RTCWAKE | Out-String), '0x[0-9a-fA-F]{8}'); " ^
-  "  if ($rtcIdx.Count -ge 2 -and $rtcIdx[$rtcIdx.Count - 2].Value -ne '0x00000001') { Write-Warning ('RTCWAKE AC terbaca ' + $rtcIdx[$rtcIdx.Count - 2].Value + ' (bukan 0x00000001). Kemungkinan dibatasi Group Policy (GPO) kantor.') }; " ^
+  "  $rtcAcOk = ($rtcIdx.Count -ge 2 -and $rtcIdx[$rtcIdx.Count - 2].Value -eq '0x00000001'); " ^
+  "  if ($rtcIdx.Count -ge 2 -and -not $rtcAcOk) { Write-Warning ('RTCWAKE AC terbaca ' + $rtcIdx[$rtcIdx.Count - 2].Value + ' (bukan 0x00000001). Kemungkinan dibatasi Group Policy (GPO) kantor.') }; " ^
   "  $idleIdx = [regex]::Matches((powercfg /q SCHEME_CURRENT SUB_SLEEP STANDBYIDLE | Out-String), '0x[0-9a-fA-F]{8}'); " ^
   "  if ($idleIdx.Count -ge 2) { $idleSec = [Convert]::ToInt64($idleIdx[$idleIdx.Count - 2].Value, 16); if ($idleSec -gt 0) { Write-Host ('  [INFO] Sleep otomatis normal (STANDBYIDLE) saat ini: ' + [math]::Round($idleSec / 60, 1) + ' menit.') -ForegroundColor DarkYellow } }; " ^
   "  Write-Host '[3/6] Menjadwalkan Auto-Restart (Rabu & Minggu 22:30)...' -ForegroundColor Cyan; " ^
@@ -79,7 +87,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host 'BERHASIL! Ringkasan jadwal terdaftar:' -ForegroundColor Green; " ^
   "  Get-ScheduledTask -TaskName 'AutoRestart_RabuMinggu','AutoHibernate_Malam','AutoWake_06Pagi' | ForEach-Object { $info = $_ | Get-ScheduledTaskInfo; [PSCustomObject]@{ Task = $_.TaskName; State = $_.State; WakeToRun = $_.Settings.WakeToRun; NextRun = $info.NextRunTime; LastRun = $info.LastRunTime } } | Format-Table -AutoSize; " ^
   "  $timers = powercfg /waketimers | Out-String; " ^
-  "  if ($timers -match 'AutoWake_06Pagi') { Write-Host '[OK] Wake timer AutoWake_06Pagi terdeteksi aktif di Windows.' -ForegroundColor Green } else { Write-Warning 'AutoWake_06Pagi belum terlihat di powercfg /waketimers. Cek apakah Wake Timers dibatasi GPO.' }; " ^
+  "  if ($timers -match 'AutoWake_06Pagi') { Write-Host '[OK] Wake timer AutoWake_06Pagi terdeteksi aktif di Windows.' -ForegroundColor Green } elseif (-not $rtcAcOk) { Write-Warning 'AutoWake_06Pagi tidak terlihat di powercfg /waketimers dan RTCWAKE AC tidak aktif. Cek apakah Wake Timers dibatasi GPO.' } else { Write-Host '[INFO] RTCWAKE sudah aktif (0x00000001) dan AutoWake_06Pagi siap (WakeToRun=True). Windows kadang tidak menampilkan wake timer task masa depan di powercfg /waketimers sebelum mendekati jadwal atau saat masuk Sleep/Hibernate. Cek hasil bangun via cek_jadwal.bat setelah pukul 06:00.' -ForegroundColor Yellow }; " ^
   "  Write-Host 'Catatan PC Kantor: Pastikan listrik/UPS tetap menyala malam hari dan BIOS tidak memblokir Wake from S4 (matikan ErP/Deep Sleep jika ada).' -ForegroundColor Gray; " ^
   "} catch { " ^
   "  Write-Host ('GAGAL: ' + $_.Exception.Message) -ForegroundColor Red; " ^

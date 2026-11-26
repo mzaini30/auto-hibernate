@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Cek Status Jadwal & Wake Up Daya Windows
+title Cek Status Jadwal ^& Wake Up Daya Windows
 
 :: Cek apakah dijalankan sebagai Administrator
 fltmc >nul 2>&1
